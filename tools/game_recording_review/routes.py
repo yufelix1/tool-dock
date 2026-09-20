@@ -21,6 +21,7 @@ COVER_EXTENSIONS = (".jpeg", ".jpg", ".png", ".webp")
 MEDIA_EXTENSIONS = VIDEO_EXTENSIONS | set(COVER_EXTENSIONS)
 MAX_SCAN_SESSIONS = 32
 MAX_BATCH_RECORDINGS = 1000
+MAX_NOTE_LENGTH = 500
 FAVORITES_FILENAME = ".game-recording-review.json"
 FAVORITES_VERSION = 1
 SETTINGS_FILENAME = "game-recording-review.json"
@@ -297,7 +298,14 @@ def _read_favorites_unlocked(root_path):
         if not isinstance(relative_path, str) or not isinstance(metadata, dict):
             raise ValueError("收藏数据格式无效")
         favorited_at = metadata.get("favorited_at")
-        if not isinstance(favorited_at, str) or not favorited_at:
+        note = metadata.get("note", "")
+        if favorited_at is not None and (
+            not isinstance(favorited_at, str) or not favorited_at
+        ):
+            raise ValueError("收藏数据格式无效")
+        if not isinstance(note, str) or len(note) > MAX_NOTE_LENGTH:
+            raise ValueError("收藏数据格式无效")
+        if favorited_at is None and not note:
             raise ValueError("收藏数据格式无效")
 
     return favorites
@@ -452,7 +460,7 @@ def scan_recordings(root_paths, ignored_directories=None):
                         relative_directory_path,
                         video_entry.name,
                     )
-                    favorite_metadata = favorites.get(_favorite_key(relative_path))
+                    favorite_metadata = favorites.get(_favorite_key(relative_path)) or {}
                     game["recordings"].append(
                         {
                             "root": root_path,
@@ -472,12 +480,9 @@ def scan_recordings(root_paths, ignored_directories=None):
                             # Keep nanoseconds as text so browsers do not round the
                             # value beyond JavaScript's safe integer range.
                             "mtime_ns": str(stat.st_mtime_ns),
-                            "favorite": favorite_metadata is not None,
-                            "favorited_at": (
-                                favorite_metadata["favorited_at"]
-                                if favorite_metadata
-                                else None
-                            ),
+                            "favorite": bool(favorite_metadata.get("favorited_at")),
+                            "favorited_at": favorite_metadata.get("favorited_at"),
+                            "note": favorite_metadata.get("note", ""),
                         }
                     )
 
@@ -583,30 +588,72 @@ def set_recording_favorite(root_path, relative_path, favorite):
     favorite_key = _favorite_key(normalized_relative_path)
     with _favorites_lock:
         favorites = _read_favorites_unlocked(root_path)
-        metadata = favorites.get(favorite_key)
+        metadata = dict(favorites.get(favorite_key) or {})
+        changed = False
 
         if favorite:
-            if metadata is None:
-                metadata = {
-                    "favorited_at": datetime.now(timezone.utc)
+            if not metadata.get("favorited_at"):
+                metadata["favorited_at"] = (
+                    datetime.now(timezone.utc)
                     .isoformat(timespec="seconds")
                     .replace("+00:00", "Z")
-                }
-                favorites[favorite_key] = metadata
-                _write_favorites_unlocked(root_path, favorites)
-        elif metadata is not None:
-            favorites.pop(favorite_key)
-            metadata = None
+                )
+                changed = True
+        elif metadata.pop("favorited_at", None) is not None:
+            changed = True
+
+        if metadata:
+            favorites[favorite_key] = metadata
+        else:
+            favorites.pop(favorite_key, None)
+        if changed:
             _write_favorites_unlocked(root_path, favorites)
 
     return {
         "path": normalized_relative_path,
         "favorite": favorite,
-        "favorited_at": metadata["favorited_at"] if metadata else None,
+        "favorited_at": metadata.get("favorited_at"),
     }
 
 
-def _remove_recording_favorite(root_path, normalized_relative_path):
+def set_recording_note(root_path, relative_path, note):
+    if not isinstance(note, str):
+        raise ValueError("备注格式无效")
+    if len(note) > MAX_NOTE_LENGTH:
+        raise ValueError(f"备注不能超过 {MAX_NOTE_LENGTH} 个字符")
+    note = note.strip()
+
+    video_path, normalized_relative_path = _resolve_relative_path(
+        root_path,
+        relative_path,
+        expected_parts={3},
+        extensions=VIDEO_EXTENSIONS,
+    )
+    if not os.path.isfile(video_path):
+        raise FileNotFoundError("录屏文件不存在，请重新扫描")
+
+    favorite_key = _favorite_key(normalized_relative_path)
+    with _favorites_lock:
+        favorites = _read_favorites_unlocked(root_path)
+        metadata = dict(favorites.get(favorite_key) or {})
+        previous_note = metadata.get("note", "")
+
+        if note:
+            metadata["note"] = note
+        else:
+            metadata.pop("note", None)
+
+        if metadata:
+            favorites[favorite_key] = metadata
+        else:
+            favorites.pop(favorite_key, None)
+        if note != previous_note:
+            _write_favorites_unlocked(root_path, favorites)
+
+    return {"path": normalized_relative_path, "note": note}
+
+
+def _remove_recording_metadata(root_path, normalized_relative_path):
     favorite_key = _favorite_key(normalized_relative_path)
     with _favorites_lock:
         favorites = _read_favorites_unlocked(root_path)
@@ -649,10 +696,10 @@ def delete_recording(root_path, relative_path, expected_size, expected_mtime_ns)
             deleted.append(os.path.join(os.path.dirname(normalized_relative_path), entry.name))
 
     try:
-        _remove_recording_favorite(root_path, normalized_relative_path)
+        _remove_recording_metadata(root_path, normalized_relative_path)
     except (OSError, ValueError) as error:
         logger.warning(
-            "Unable to remove favorite metadata for %s: %s",
+            "Unable to remove recording metadata for %s: %s",
             normalized_relative_path,
             error,
         )
@@ -940,6 +987,31 @@ def api_set_recording_favorite():
             root_path,
             data.get("path"),
             data.get("favorite"),
+        )
+    except ValueError as error:
+        return _json_error(str(error), 400)
+    except FileNotFoundError as error:
+        return _json_error(str(error), 404)
+    except OSError as error:
+        return _json_error(error.strerror or str(error), 409)
+
+    return jsonify({"success": True, **result})
+
+
+@game_recording_review_bp.route("/api/recording/note", methods=["PATCH"])
+def api_set_recording_note():
+    data = request.get_json(silent=True) or {}
+    if not _get_scan_context(data.get("scan_id")):
+        return _json_error("扫描已失效，请重新扫描", 404)
+    root_path = _get_scan_root(data.get("scan_id"), data.get("root"))
+    if not root_path:
+        return _json_error("录屏所属根目录无效，请重新扫描", 400)
+
+    try:
+        result = set_recording_note(
+            root_path,
+            data.get("path"),
+            data.get("note"),
         )
     except ValueError as error:
         return _json_error(str(error), 400)

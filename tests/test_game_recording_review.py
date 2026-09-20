@@ -8,6 +8,7 @@ from flask import Flask
 
 from tools.game_recording_review.routes import (
     FAVORITES_FILENAME,
+    MAX_NOTE_LENGTH,
     SETTINGS_CONFIG_DIR_ENV,
     SETTINGS_FILENAME,
     delete_empty_recording_directories,
@@ -17,6 +18,7 @@ from tools.game_recording_review.routes import (
     read_settings,
     scan_recordings,
     set_recording_favorite,
+    set_recording_note,
     write_settings,
 )
 
@@ -144,6 +146,7 @@ class GameRecordingReviewTestCase(unittest.TestCase):
             self.assertEqual(covered["created_at"], expected_created_at)
             self.assertFalse(covered["favorite"])
             self.assertIsNone(covered["favorited_at"])
+            self.assertEqual(covered["note"], "")
             self.assertEqual(result["empty_directories"][0]["directory_id"], "empty-directory")
             self.assertEqual(result["errors"], [])
 
@@ -305,6 +308,86 @@ class GameRecordingReviewTestCase(unittest.TestCase):
                     for recording in game["recordings"]
                 )
             )
+
+    def test_note_persists_and_favorite_updates_preserve_it(self):
+        with tempfile.TemporaryDirectory() as root:
+            video_path, _, _, _, _ = self.create_recording_tree(root)
+            relative_path = os.path.relpath(video_path, root)
+
+            saved = set_recording_note(root, relative_path, "精彩团战\n五杀")
+            self.assertEqual(saved["note"], "精彩团战\n五杀")
+
+            set_recording_favorite(root, relative_path, True)
+            set_recording_favorite(root, relative_path, False)
+            recording = next(
+                item
+                for game in scan_recordings(root)["games"]
+                for item in game["recordings"]
+                if item["path"] == relative_path
+            )
+            self.assertFalse(recording["favorite"])
+            self.assertEqual(recording["note"], "精彩团战\n五杀")
+
+            set_recording_note(root, relative_path, "")
+            with open(os.path.join(root, FAVORITES_FILENAME), encoding="utf-8") as metadata_file:
+                metadata = json.load(metadata_file)
+            self.assertNotIn(relative_path.replace(os.sep, "/"), metadata["favorites"])
+
+    def test_note_api_validates_and_survives_a_new_scan(self):
+        with tempfile.TemporaryDirectory() as root:
+            video_path, _, _, _, _ = self.create_recording_tree(root)
+            app = Flask(__name__)
+            app.register_blueprint(
+                game_recording_review_bp,
+                url_prefix="/tools/game-recording-review",
+            )
+            client = app.test_client()
+            scan_data = client.post(
+                "/tools/game-recording-review/api/scan",
+                json={"path": root},
+            ).get_json()
+            relative_path = os.path.relpath(video_path, root)
+
+            response = client.patch(
+                "/tools/game-recording-review/api/recording/note",
+                json={
+                    "scan_id": scan_data["scan_id"],
+                    "path": relative_path,
+                    "note": "  高光时刻  ",
+                },
+            )
+            too_long = client.patch(
+                "/tools/game-recording-review/api/recording/note",
+                json={
+                    "scan_id": scan_data["scan_id"],
+                    "path": relative_path,
+                    "note": "x" * (MAX_NOTE_LENGTH + 1),
+                },
+            )
+            invalid = client.patch(
+                "/tools/game-recording-review/api/recording/note",
+                json={
+                    "scan_id": scan_data["scan_id"],
+                    "path": relative_path,
+                    "note": ["not", "text"],
+                },
+            )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.get_json()["note"], "高光时刻")
+            self.assertEqual(too_long.status_code, 400)
+            self.assertEqual(invalid.status_code, 400)
+            rescanned = client.post(
+                "/tools/game-recording-review/api/scan",
+                json={"path": root},
+            ).get_json()
+            recording = next(
+                item
+                for game in rescanned["games"]
+                for item in game["recordings"]
+                if item["path"] == relative_path
+            )
+            self.assertEqual(recording["note"], "高光时刻")
 
     def test_delete_recording_removes_its_cover_and_preserves_other_video(self):
         with tempfile.TemporaryDirectory() as root:

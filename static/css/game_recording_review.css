@@ -608,25 +608,41 @@ html {
     font-size: 11px;
 }
 
-.recording-meta span:first-child {
+.recording-date {
+    flex: 0 0 auto;
+}
+
+.recording-note {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--review-accent-dark);
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.recording-directory {
+    display: flex;
+    min-width: 0;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 4px;
+    color: var(--faint);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+}
+
+.recording-directory-label {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.recording-meta span:last-child {
+.recording-size {
     flex: 0 0 auto;
-}
-
-.recording-directory {
-    margin-top: 4px;
-    overflow: hidden;
-    color: var(--faint);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 10px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    color: var(--review-muted);
+    font-family: inherit;
 }
 
 .recording-card-actions {
@@ -1034,9 +1050,92 @@ html {
 .preview-dialog video {
     display: block;
     width: 100%;
-    max-height: calc(100dvh - 100px);
+    max-height: calc(100dvh - 210px);
     background: #080b0a;
     aspect-ratio: 16 / 9;
+}
+
+.preview-note-form {
+    display: grid;
+    grid-template-areas:
+        "input actions"
+        "error error";
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+    padding: 12px 14px;
+    border-top: 1px solid #39413f;
+    background: #151b19;
+}
+
+.preview-note-form textarea {
+    grid-area: input;
+    width: 100%;
+    min-height: 58px;
+    margin: 0;
+    padding: 9px 10px;
+    resize: vertical;
+    border: 1px solid #4b5652;
+    border-radius: 6px;
+    background: #0d1312;
+    color: #f5faf8;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.preview-note-form textarea:focus {
+    border-color: var(--review-accent);
+    outline: 2px solid color-mix(in srgb, var(--review-accent) 38%, transparent);
+    outline-offset: 1px;
+}
+
+.preview-note-actions {
+    display: flex;
+    grid-area: actions;
+    min-width: 118px;
+    align-items: flex-end;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.preview-note-actions > span {
+    color: #aab5b1;
+    font-size: 11px;
+}
+
+.preview-note-actions > div {
+    display: flex;
+    gap: 6px;
+}
+
+.review-page .preview-note-actions button {
+    min-height: 32px;
+    padding: 6px 10px;
+    border: 1px solid #4b5652;
+    background: transparent;
+    color: #f5faf8;
+    font-size: 12px;
+}
+
+.review-page .preview-note-actions button[type="submit"] {
+    border-color: var(--review-accent);
+    background: var(--review-accent);
+}
+
+.review-page .preview-note-actions button:hover:not(:disabled) {
+    border-color: #73807b;
+    background: #222b28;
+}
+
+.review-page .preview-note-actions button[type="submit"]:hover:not(:disabled) {
+    border-color: var(--review-accent-dark);
+    background: var(--review-accent-dark);
+}
+
+.preview-note-error {
+    grid-area: error;
+    color: #ffaaa2;
+    font-size: 12px;
 }
 
 .review-toast {
@@ -1197,5 +1296,19 @@ html {
 
     .preview-dialog {
         width: calc(100vw - 20px);
+    }
+
+    .preview-note-form {
+        grid-template-areas:
+            "input"
+            "actions"
+            "error";
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .preview-note-actions {
+        min-width: 0;
+        align-items: center;
+        flex-direction: row;
     }
 }

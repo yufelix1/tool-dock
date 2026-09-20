@@ -55,6 +55,12 @@ const elements = {
     previewName: document.getElementById("preview-name"),
     previewLocation: document.getElementById("preview-location"),
     closePreviewButton: document.getElementById("close-preview-button"),
+    previewNoteForm: document.getElementById("preview-note-form"),
+    previewNoteInput: document.getElementById("preview-note-input"),
+    previewNoteCharacterCount: document.getElementById("preview-note-character-count"),
+    previewNoteError: document.getElementById("preview-note-error"),
+    clearPreviewNoteButton: document.getElementById("clear-preview-note-button"),
+    savePreviewNoteButton: document.getElementById("save-preview-note-button"),
     settingsDialog: document.getElementById("settings-dialog"),
     settingsForm: document.getElementById("settings-form"),
     settingsRootPaths: document.getElementById("settings-root-paths"),
@@ -68,6 +74,7 @@ const elements = {
 
 let toastTimer;
 let directorySegmentLayoutFrame;
+let activePreviewRecording = null;
 
 const directorySegmentObserver = typeof ResizeObserver === "function"
     ? new ResizeObserver(scheduleRecordingDirectorySegments)
@@ -148,6 +155,12 @@ elements.previewDialog.addEventListener("close", stopPreview);
 elements.previewDialog.addEventListener("click", event => {
     if (event.target === elements.previewDialog) closePreview();
 });
+elements.previewNoteForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    await saveRecordingNote(elements.previewNoteInput.value);
+});
+elements.previewNoteInput.addEventListener("input", updateNoteCharacterCount);
+elements.clearPreviewNoteButton.addEventListener("click", () => saveRecordingNote(""));
 
 initializeSettings();
 
@@ -355,7 +368,13 @@ function recordingMatchesScope(recording) {
 function recordingMatches(recording) {
     if (!recordingMatchesScope(recording)) return false;
     if (!reviewState.filter) return true;
-    return [recording.game_id, recording.directory_id, recording.name, recording.root]
+    return [
+        recording.game_id,
+        recording.directory_id,
+        recording.name,
+        recording.root,
+        recording.note || "",
+    ]
         .some(value => value.toLowerCase().includes(reviewState.filter));
 }
 
@@ -617,17 +636,27 @@ function createRecordingCard(recording, options = {}) {
     const meta = document.createElement("div");
     meta.className = "recording-meta";
     const date = document.createElement("span");
+    date.className = "recording-date";
     date.textContent = formatDate(recording.created_at ?? recording.mtime);
-    const size = document.createElement("span");
-    size.textContent = formatBytes(recording.size);
-    meta.append(date, size);
+    const note = document.createElement("span");
+    note.className = "recording-note";
+    note.textContent = recording.note || "";
+    note.title = recording.note || "";
+    note.hidden = !recording.note;
+    meta.append(date, note);
 
     const directory = document.createElement("div");
     directory.className = "recording-directory";
     directory.title = `${recording.root}/${recording.directory_path}`;
-    directory.textContent = grouped
+    const directoryLabel = document.createElement("span");
+    directoryLabel.className = "recording-directory-label";
+    directoryLabel.textContent = grouped
         ? sourceLabel(recording.root)
         : `${recording.directory_id} · ${sourceLabel(recording.root)}`;
+    const size = document.createElement("span");
+    size.className = "recording-size";
+    size.textContent = formatBytes(recording.size);
+    directory.append(directoryLabel, size);
 
     info.append(name, meta, directory);
 
@@ -686,6 +715,50 @@ async function toggleFavorite(recording, button) {
     } finally {
         button.disabled = false;
         button.removeAttribute("aria-busy");
+    }
+}
+
+function updateNoteCharacterCount() {
+    elements.previewNoteCharacterCount.textContent = `${elements.previewNoteInput.value.length} / 500`;
+}
+
+function setNoteSaving(saving) {
+    elements.previewNoteInput.disabled = saving;
+    elements.closePreviewButton.disabled = saving;
+    elements.clearPreviewNoteButton.disabled = saving;
+    elements.savePreviewNoteButton.disabled = saving;
+    elements.savePreviewNoteButton.textContent = saving ? "正在保存..." : "保存备注";
+}
+
+async function saveRecordingNote(note) {
+    if (!activePreviewRecording) return;
+    const recording = activePreviewRecording;
+    setNoteSaving(true);
+    elements.previewNoteError.hidden = true;
+    elements.previewNoteError.textContent = "";
+
+    try {
+        const data = await requestJson("/tools/game-recording-review/api/recording/note", {
+            method: "PATCH",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                scan_id: reviewState.scanId,
+                root: recording.root,
+                path: recording.path,
+                note,
+            }),
+        });
+        recording.note = data.note;
+        elements.previewNoteInput.value = data.note;
+        elements.clearPreviewNoteButton.hidden = !data.note;
+        updateNoteCharacterCount();
+        renderAll();
+        showToast(data.note ? "备注已保存" : "备注已清空");
+    } catch (error) {
+        elements.previewNoteError.hidden = false;
+        elements.previewNoteError.textContent = error.message;
+    } finally {
+        setNoteSaving(false);
     }
 }
 
@@ -757,9 +830,15 @@ function mediaUrl(root, relativePath) {
 }
 
 function openPreview(recording) {
+    activePreviewRecording = recording;
     elements.previewName.textContent = recording.name;
     elements.previewLocation.textContent = `${recording.game_id} / ${recording.directory_id} · ${recording.root}`;
     elements.previewVideo.src = mediaUrl(recording.root, recording.path);
+    elements.previewNoteInput.value = recording.note || "";
+    elements.clearPreviewNoteButton.hidden = !recording.note;
+    elements.previewNoteError.hidden = true;
+    elements.previewNoteError.textContent = "";
+    updateNoteCharacterCount();
     elements.previewDialog.showModal();
     elements.previewVideo.play().catch(() => {});
 }
@@ -769,9 +848,14 @@ function closePreview() {
 }
 
 function stopPreview() {
+    activePreviewRecording = null;
     elements.previewVideo.pause();
     elements.previewVideo.removeAttribute("src");
     elements.previewVideo.load();
+    elements.previewNoteInput.value = "";
+    elements.previewNoteError.hidden = true;
+    elements.previewNoteError.textContent = "";
+    setNoteSaving(false);
 }
 
 async function deleteSelectedRecordings() {
