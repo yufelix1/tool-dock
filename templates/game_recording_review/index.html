@@ -80,7 +80,7 @@
                 </label>
                 <label class="filter-field">
                     <span class="sr-only">搜索录屏</span>
-                    <input id="filter-input" type="text" placeholder="搜索目录、文件名或备注">
+                    <input id="filter-input" type="text" placeholder="搜索目录、文件名或评论">
                 </label>
                 <div id="batch-controls" class="batch-controls" aria-label="批量删除录屏">
                     <label class="batch-select-all" title="全选当前结果">
@@ -157,8 +157,8 @@
     </div>
     <video id="preview-video" controls preload="metadata"></video>
     <form id="preview-note-form" class="preview-note-form">
-        <label class="sr-only" for="preview-note-input">录屏备注</label>
-        <input id="preview-note-input" type="text" maxlength="100" placeholder="为这段录屏添加备注" aria-describedby="preview-note-error" autocomplete="off">
+        <label class="sr-only" for="preview-note-input">录屏评论</label>
+        <input id="preview-note-input" type="text" maxlength="100" placeholder="为这段录屏添加评论" aria-describedby="preview-note-error" autocomplete="off">
         <button id="save-preview-note-button" type="submit">保存</button>
         <div id="preview-note-error" class="preview-note-error" role="alert" hidden></div>
     </form>

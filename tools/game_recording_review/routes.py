@@ -618,9 +618,9 @@ def set_recording_favorite(root_path, relative_path, favorite):
 
 def set_recording_note(root_path, relative_path, note):
     if not isinstance(note, str):
-        raise ValueError("备注格式无效")
+        raise ValueError("评论格式无效")
     if len(note) > MAX_NOTE_LENGTH:
-        raise ValueError(f"备注不能超过 {MAX_NOTE_LENGTH} 个字符")
+        raise ValueError(f"评论不能超过 {MAX_NOTE_LENGTH} 个字符")
     note = note.strip()
 
     video_path, normalized_relative_path = _resolve_relative_path(

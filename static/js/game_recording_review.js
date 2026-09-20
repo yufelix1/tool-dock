@@ -742,7 +742,7 @@ async function saveRecordingNote(note) {
         recording.note = data.note;
         elements.previewNoteInput.value = data.note;
         renderAll();
-        showToast(data.note ? "备注已保存" : "备注已清空");
+        showToast(data.note ? "评论已保存" : "评论已清空");
     } catch (error) {
         elements.previewNoteError.hidden = false;
         elements.previewNoteError.textContent = error.message;
