@@ -407,6 +407,92 @@ html {
     gap: 18px;
 }
 
+.recording-directory-cluster {
+    display: contents;
+}
+
+.recording-directory-cell {
+    position: relative;
+    display: grid;
+    min-width: 0;
+}
+
+.recording-directory-cell::before {
+    position: absolute;
+    z-index: 0;
+    top: -4px;
+    right: -9px;
+    bottom: -4px;
+    left: -9px;
+    border-top: 1px solid var(--line-strong);
+    border-bottom: 1px solid var(--line-strong);
+    content: "";
+    pointer-events: none;
+    transition: border-color 0.15s ease;
+}
+
+.recording-directory-cell.is-segment-start::before {
+    left: -4px;
+    border-left: 1px solid var(--line-strong);
+    border-radius: 8px 0 0 8px;
+}
+
+.recording-directory-cell.is-segment-end::before {
+    right: -4px;
+    border-right: 1px solid var(--line-strong);
+    border-radius: 0 8px 8px 0;
+}
+
+.recording-directory-cell.is-segment-start.is-segment-end::before {
+    border-radius: 8px;
+}
+
+.recording-directory-cluster:hover .recording-directory-cell::before,
+.recording-directory-cluster:focus-within .recording-directory-cell::before,
+.recording-directory-cluster:has(.recording-card.is-selected) .recording-directory-cell::before {
+    border-color: var(--review-accent);
+}
+
+.recording-directory-cluster-label {
+    display: none;
+    position: absolute;
+    top: -12px;
+    left: 8px;
+    z-index: 3;
+    max-width: calc(100% - 16px);
+    padding: 0 5px;
+    overflow: hidden;
+    background: var(--review-canvas);
+    color: var(--review-muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    line-height: 16px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    pointer-events: none;
+    transition: color 0.15s ease;
+}
+
+.recording-directory-cell.is-segment-start > .recording-directory-cluster-label {
+    display: block;
+}
+
+.recording-directory-cluster:hover .recording-directory-cluster-label,
+.recording-directory-cluster:focus-within .recording-directory-cluster-label,
+.recording-directory-cluster:has(.recording-card.is-selected) .recording-directory-cluster-label {
+    color: var(--review-accent-dark);
+}
+
+.recording-directory-cell .recording-card {
+    z-index: 1;
+}
+
+.recording-directory-cluster:hover .recording-card,
+.recording-directory-cluster:focus-within .recording-card,
+.recording-directory-cluster:has(.recording-card.is-selected) .recording-card {
+    border-color: color-mix(in srgb, var(--review-accent) 42%, var(--review-line));
+}
+
 .recording-card {
     position: relative;
     display: grid;
@@ -1037,6 +1123,30 @@ html {
     .recording-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 10px;
+    }
+
+    .recording-directory-cell::before {
+        top: -3px;
+        right: -5px;
+        bottom: -3px;
+        left: -5px;
+    }
+
+    .recording-directory-cell.is-segment-start::before {
+        left: -3px;
+    }
+
+    .recording-directory-cell.is-segment-end::before {
+        right: -3px;
+    }
+
+    .recording-directory-cluster-label {
+        top: -10px;
+        left: 6px;
+        max-width: calc(100% - 12px);
+        padding-inline: 4px;
+        font-size: 9px;
+        line-height: 14px;
     }
 
     .recording-card:hover {

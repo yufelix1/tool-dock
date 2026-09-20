@@ -67,6 +67,13 @@ const elements = {
 };
 
 let toastTimer;
+let directorySegmentLayoutFrame;
+
+const directorySegmentObserver = typeof ResizeObserver === "function"
+    ? new ResizeObserver(scheduleRecordingDirectorySegments)
+    : null;
+
+window.addEventListener("resize", scheduleRecordingDirectorySegments);
 
 elements.settingsForm.addEventListener("submit", async event => {
     event.preventDefault();
@@ -425,6 +432,9 @@ function renderFavorites() {
 }
 
 function renderRecordingGroups(container, emptyElement, predicate) {
+    container.querySelectorAll(".recording-grid").forEach(grid => {
+        directorySegmentObserver?.unobserve(grid);
+    });
     container.replaceChildren();
     let visibleCount = 0;
 
@@ -446,15 +456,101 @@ function renderRecordingGroups(container, emptyElement, predicate) {
 
         const grid = document.createElement("div");
         grid.className = "recording-grid";
-        recordings.forEach(recording => grid.appendChild(createRecordingCard(recording)));
+        groupRecordingsByDirectory(recordings).forEach(group => {
+            if (group.recordings.length === 1) {
+                grid.appendChild(createRecordingCard(group.recordings[0]));
+                return;
+            }
+            grid.appendChild(createRecordingDirectoryCluster(group));
+        });
         section.append(header, grid);
         container.appendChild(section);
+        directorySegmentObserver?.observe(grid);
     });
 
     emptyElement.hidden = visibleCount > 0;
+    scheduleRecordingDirectorySegments();
 }
 
-function createRecordingCard(recording) {
+function groupRecordingsByDirectory(recordings) {
+    const groups = new Map();
+    recordings.forEach(recording => {
+        const key = JSON.stringify([recording.root, recording.directory_path]);
+        if (!groups.has(key)) {
+            groups.set(key, {
+                root: recording.root,
+                directoryId: recording.directory_id,
+                directoryPath: recording.directory_path,
+                recordings: [],
+            });
+        }
+        groups.get(key).recordings.push(recording);
+    });
+    return [...groups.values()];
+}
+
+function createRecordingDirectoryCluster(group) {
+    const cluster = document.createElement("div");
+    cluster.className = "recording-directory-cluster";
+    cluster.setAttribute(
+        "aria-label",
+        `目录 ${group.directoryId}，${group.recordings.length} 个录屏`,
+    );
+    cluster.setAttribute("role", "group");
+
+    group.recordings.forEach(recording => {
+        const cell = document.createElement("div");
+        cell.className = "recording-directory-cell";
+
+        const label = document.createElement("span");
+        label.className = "recording-directory-cluster-label";
+        label.textContent = `${group.directoryId} · ${group.recordings.length} 个录屏`;
+        label.title = `${group.root}/${group.directoryPath}`;
+
+        cell.append(label, createRecordingCard(recording, {grouped: true}));
+        cluster.appendChild(cell);
+    });
+    return cluster;
+}
+
+function scheduleRecordingDirectorySegments() {
+    if (directorySegmentLayoutFrame) cancelAnimationFrame(directorySegmentLayoutFrame);
+    directorySegmentLayoutFrame = requestAnimationFrame(() => {
+        directorySegmentLayoutFrame = null;
+        syncRecordingDirectorySegments();
+    });
+}
+
+function syncRecordingDirectorySegments() {
+    document.querySelectorAll(".recording-directory-cluster").forEach(cluster => {
+        const cells = [...cluster.children].filter(child => (
+            child.classList.contains("recording-directory-cell")
+        ));
+        cells.forEach(cell => {
+            cell.classList.remove("is-segment-start", "is-segment-end");
+        });
+
+        const rows = [];
+        cells.forEach(cell => {
+            const rect = cell.getBoundingClientRect();
+            if (!rect.width) return;
+            let row = rows.find(item => Math.abs(item.top - rect.top) < 2);
+            if (!row) {
+                row = {top: rect.top, cells: []};
+                rows.push(row);
+            }
+            row.cells.push(cell);
+        });
+
+        rows.forEach(row => {
+            row.cells[0]?.classList.add("is-segment-start");
+            row.cells.at(-1)?.classList.add("is-segment-end");
+        });
+    });
+}
+
+function createRecordingCard(recording, options = {}) {
+    const {grouped = false} = options;
     const article = document.createElement("article");
     article.className = "recording-card";
     const key = recordingKey(recording);
@@ -529,7 +625,9 @@ function createRecordingCard(recording) {
     const directory = document.createElement("div");
     directory.className = "recording-directory";
     directory.title = `${recording.root}/${recording.directory_path}`;
-    directory.textContent = `${recording.directory_id} · ${sourceLabel(recording.root)}`;
+    directory.textContent = grouped
+        ? sourceLabel(recording.root)
+        : `${recording.directory_id} · ${sourceLabel(recording.root)}`;
 
     info.append(name, meta, directory);
 
