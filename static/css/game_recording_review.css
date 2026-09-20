@@ -1058,75 +1058,51 @@ html {
 .preview-note-form {
     display: grid;
     grid-template-areas:
-        "input actions"
+        "input save"
         "error error";
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px 12px;
-    padding: 12px 14px;
+    gap: 7px 8px;
+    padding: 10px 14px;
     border-top: 1px solid #39413f;
     background: #151b19;
 }
 
-.preview-note-form textarea {
+.preview-note-form input {
     grid-area: input;
+    box-sizing: border-box;
     width: 100%;
     height: 38px;
     min-height: 38px;
     margin: 0;
-    padding: 9px 10px;
-    resize: vertical;
+    padding: 8px 10px;
     border: 1px solid #4b5652;
     border-radius: 6px;
     background: #0d1312;
     color: #f5faf8;
     font-size: 13px;
-    line-height: 1.45;
 }
 
-.preview-note-form textarea:focus {
+.preview-note-form input:focus {
     border-color: var(--review-accent);
     outline: 2px solid color-mix(in srgb, var(--review-accent) 38%, transparent);
     outline-offset: 1px;
 }
 
-.preview-note-actions {
-    display: flex;
-    grid-area: actions;
-    min-width: 118px;
-    align-items: flex-end;
-    flex-direction: column;
-    justify-content: flex-start;
-    gap: 6px;
-}
-
-.preview-note-actions > div {
-    display: flex;
-    gap: 6px;
-}
-
-.review-page .preview-note-actions button {
+.review-page .preview-note-form > button {
+    grid-area: save;
     height: 38px;
     min-height: 38px;
-    padding: 6px 10px;
+    padding: 6px 14px;
     border: 1px solid #4b5652;
-    background: transparent;
-    color: #f5faf8;
+    background: #26312e;
+    color: #dce7e3;
     font-size: 12px;
 }
 
-.review-page .preview-note-actions button[type="submit"] {
-    border-color: var(--review-accent);
-    background: var(--review-accent);
-}
-
-.review-page .preview-note-actions button:hover:not(:disabled) {
-    border-color: #73807b;
-    background: #222b28;
-}
-
-.review-page .preview-note-actions button[type="submit"]:hover:not(:disabled) {
-    border-color: var(--review-accent-dark);
-    background: var(--review-accent-dark);
+.review-page .preview-note-form > button:hover:not(:disabled) {
+    border-color: #66736e;
+    background: #303d39;
+    color: #f5faf8;
 }
 
 .preview-note-error {
@@ -1295,17 +1271,4 @@ html {
         width: calc(100vw - 20px);
     }
 
-    .preview-note-form {
-        grid-template-areas:
-            "input"
-            "actions"
-            "error";
-        grid-template-columns: minmax(0, 1fr);
-    }
-
-    .preview-note-actions {
-        min-width: 0;
-        align-items: center;
-        flex-direction: row;
-    }
 }

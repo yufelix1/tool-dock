@@ -158,13 +158,8 @@
     <video id="preview-video" controls preload="metadata"></video>
     <form id="preview-note-form" class="preview-note-form">
         <label class="sr-only" for="preview-note-input">录屏备注</label>
-        <textarea id="preview-note-input" rows="1" maxlength="100" placeholder="为这段录屏添加备注" aria-describedby="preview-note-error" autocomplete="off"></textarea>
-        <div class="preview-note-actions">
-            <div>
-                <button id="clear-preview-note-button" type="button" hidden>清空</button>
-                <button id="save-preview-note-button" type="submit">保存备注</button>
-            </div>
-        </div>
+        <input id="preview-note-input" type="text" maxlength="100" placeholder="为这段录屏添加备注" aria-describedby="preview-note-error" autocomplete="off">
+        <button id="save-preview-note-button" type="submit">保存</button>
         <div id="preview-note-error" class="preview-note-error" role="alert" hidden></div>
     </form>
 </dialog>

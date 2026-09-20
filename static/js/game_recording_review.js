@@ -58,7 +58,6 @@ const elements = {
     previewNoteForm: document.getElementById("preview-note-form"),
     previewNoteInput: document.getElementById("preview-note-input"),
     previewNoteError: document.getElementById("preview-note-error"),
-    clearPreviewNoteButton: document.getElementById("clear-preview-note-button"),
     savePreviewNoteButton: document.getElementById("save-preview-note-button"),
     settingsDialog: document.getElementById("settings-dialog"),
     settingsForm: document.getElementById("settings-form"),
@@ -158,7 +157,6 @@ elements.previewNoteForm.addEventListener("submit", async event => {
     event.preventDefault();
     await saveRecordingNote(elements.previewNoteInput.value);
 });
-elements.clearPreviewNoteButton.addEventListener("click", () => saveRecordingNote(""));
 
 initializeSettings();
 
@@ -719,9 +717,8 @@ async function toggleFavorite(recording, button) {
 function setNoteSaving(saving) {
     elements.previewNoteInput.disabled = saving;
     elements.closePreviewButton.disabled = saving;
-    elements.clearPreviewNoteButton.disabled = saving;
     elements.savePreviewNoteButton.disabled = saving;
-    elements.savePreviewNoteButton.textContent = saving ? "正在保存..." : "保存备注";
+    elements.savePreviewNoteButton.textContent = saving ? "保存中..." : "保存";
 }
 
 async function saveRecordingNote(note) {
@@ -744,7 +741,6 @@ async function saveRecordingNote(note) {
         });
         recording.note = data.note;
         elements.previewNoteInput.value = data.note;
-        elements.clearPreviewNoteButton.hidden = !data.note;
         renderAll();
         showToast(data.note ? "备注已保存" : "备注已清空");
     } catch (error) {
@@ -828,7 +824,6 @@ function openPreview(recording) {
     elements.previewLocation.textContent = `${recording.game_id} / ${recording.directory_id} · ${recording.root}`;
     elements.previewVideo.src = mediaUrl(recording.root, recording.path);
     elements.previewNoteInput.value = recording.note || "";
-    elements.clearPreviewNoteButton.hidden = !recording.note;
     elements.previewNoteError.hidden = true;
     elements.previewNoteError.textContent = "";
     elements.previewDialog.showModal();
