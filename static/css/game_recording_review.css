@@ -1070,7 +1070,8 @@ html {
 .preview-note-form textarea {
     grid-area: input;
     width: 100%;
-    min-height: 58px;
+    height: 38px;
+    min-height: 38px;
     margin: 0;
     padding: 9px 10px;
     resize: vertical;
