@@ -57,7 +57,6 @@ const elements = {
     closePreviewButton: document.getElementById("close-preview-button"),
     previewNoteForm: document.getElementById("preview-note-form"),
     previewNoteInput: document.getElementById("preview-note-input"),
-    previewNoteCharacterCount: document.getElementById("preview-note-character-count"),
     previewNoteError: document.getElementById("preview-note-error"),
     clearPreviewNoteButton: document.getElementById("clear-preview-note-button"),
     savePreviewNoteButton: document.getElementById("save-preview-note-button"),
@@ -159,7 +158,6 @@ elements.previewNoteForm.addEventListener("submit", async event => {
     event.preventDefault();
     await saveRecordingNote(elements.previewNoteInput.value);
 });
-elements.previewNoteInput.addEventListener("input", updateNoteCharacterCount);
 elements.clearPreviewNoteButton.addEventListener("click", () => saveRecordingNote(""));
 
 initializeSettings();
@@ -718,10 +716,6 @@ async function toggleFavorite(recording, button) {
     }
 }
 
-function updateNoteCharacterCount() {
-    elements.previewNoteCharacterCount.textContent = `${elements.previewNoteInput.value.length} / 500`;
-}
-
 function setNoteSaving(saving) {
     elements.previewNoteInput.disabled = saving;
     elements.closePreviewButton.disabled = saving;
@@ -751,7 +745,6 @@ async function saveRecordingNote(note) {
         recording.note = data.note;
         elements.previewNoteInput.value = data.note;
         elements.clearPreviewNoteButton.hidden = !data.note;
-        updateNoteCharacterCount();
         renderAll();
         showToast(data.note ? "备注已保存" : "备注已清空");
     } catch (error) {
@@ -838,7 +831,6 @@ function openPreview(recording) {
     elements.clearPreviewNoteButton.hidden = !recording.note;
     elements.previewNoteError.hidden = true;
     elements.previewNoteError.textContent = "";
-    updateNoteCharacterCount();
     elements.previewDialog.showModal();
     elements.previewVideo.play().catch(() => {});
 }

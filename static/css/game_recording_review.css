@@ -1095,13 +1095,8 @@ html {
     min-width: 118px;
     align-items: flex-end;
     flex-direction: column;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 6px;
-}
-
-.preview-note-actions > span {
-    color: #aab5b1;
-    font-size: 11px;
 }
 
 .preview-note-actions > div {
@@ -1110,7 +1105,8 @@ html {
 }
 
 .review-page .preview-note-actions button {
-    min-height: 32px;
+    height: 38px;
+    min-height: 38px;
     padding: 6px 10px;
     border: 1px solid #4b5652;
     background: transparent;
