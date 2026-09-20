@@ -1,9 +1,9 @@
 version: '3.8'
 
 services:
-  my-toolkit:
+  tool-dock:
     build: .
-    container_name: my-toolkit
+    container_name: tool-dock
     ports:
       - "5000:5000"
     volumes:

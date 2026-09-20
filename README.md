@@ -1,6 +1,6 @@
-# 🛠️ 我的工具集 (my-toolkit)
+# ToolDock
 
-一个基于 Flask + Docker 的个人网页工具集，用于快速整合和管理常用工具。
+一个基于 Flask + Docker 的个人工作台，用于快速整合和管理常用工具。
 
 ---
 
@@ -24,7 +24,7 @@
 ## 快速启动
 
 ```bash
-cd my-toolkit
+cd tool-dock
 docker compose up --build -d
 ```
 
