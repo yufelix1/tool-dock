@@ -18,9 +18,22 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Calculate image version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version_number=$((GITHUB_RUN_NUMBER + 100))
+          major=$((version_number / 1000))
+          minor=$(((version_number / 100) % 10))
+          patch=$((version_number % 100))
+          echo "value=${major}.${minor}.${patch}" >> "$GITHUB_OUTPUT"
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/tool-dock:latest
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/tool-dock:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/tool-dock:${{ steps.version.outputs.value }}
