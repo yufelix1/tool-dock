@@ -702,6 +702,7 @@ async function toggleFavorite(recording, button) {
         });
         recording.favorite = data.favorite;
         recording.favorited_at = data.favorited_at;
+        recording.protected = data.protected;
         reviewState.selectedRecordingKeys.delete(recordingKey(recording));
         updateFavoriteButton(button, recording);
         renderAll();
@@ -740,6 +741,7 @@ async function saveRecordingNote(note) {
             }),
         });
         recording.note = data.note;
+        recording.protected = data.protected;
         elements.previewNoteInput.value = data.note;
         renderAll();
         showToast(data.note ? "评论已保存" : "评论已清空");
@@ -850,7 +852,17 @@ async function deleteSelectedRecordings() {
         reviewState.selectedRecordingKeys.has(recordingKey(recording))
     ));
     if (!recordings.length) return;
-    if (!confirm(`确定删除选中的 ${recordings.length} 个录屏及其封面吗？此操作不可撤销。`)) return;
+    const protectedRecordings = recordings.filter(recording => recording.protected);
+    const deletableRecordings = recordings.filter(recording => !recording.protected);
+    if (!deletableRecordings.length) {
+        showStatus("所选录屏均包含收藏、评论或其他关联数据，无法删除", "warning");
+        return;
+    }
+
+    const confirmation = protectedRecordings.length
+        ? `选中的 ${recordings.length} 个录屏中，${protectedRecordings.length} 个包含收藏、评论或其他关联数据，将保留。确定删除其余 ${deletableRecordings.length} 个录屏及其封面吗？此操作不可撤销。`
+        : `确定删除选中的 ${recordings.length} 个录屏及其封面吗？此操作不可撤销。`;
+    if (!confirm(confirmation)) return;
 
     reviewState.batchDeleting = true;
     syncRecordingSelectionControls();
@@ -861,7 +873,7 @@ async function deleteSelectedRecordings() {
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({
                 scan_id: reviewState.scanId,
-                recordings: recordings.map(recording => ({
+                recordings: deletableRecordings.map(recording => ({
                     root: recording.root,
                     path: recording.path,
                     size: recording.size,
@@ -881,7 +893,10 @@ async function deleteSelectedRecordings() {
                 "warning",
             );
         } else {
-            showToast(`已删除 ${data.deleted_count} 个录屏`);
+            const protectedMessage = protectedRecordings.length
+                ? `，保留 ${protectedRecordings.length} 个受保护录屏`
+                : "";
+            showToast(`已删除 ${data.deleted_count} 个录屏${protectedMessage}`);
         }
     } catch (error) {
         showStatus(error.message);

@@ -147,6 +147,7 @@ class GameRecordingReviewTestCase(unittest.TestCase):
             self.assertFalse(covered["favorite"])
             self.assertIsNone(covered["favorited_at"])
             self.assertEqual(covered["note"], "")
+            self.assertFalse(covered["protected"])
             self.assertEqual(result["empty_directories"][0]["directory_id"], "empty-directory")
             self.assertEqual(result["errors"], [])
 
@@ -262,6 +263,7 @@ class GameRecordingReviewTestCase(unittest.TestCase):
 
             self.assertTrue(favorite["favorite"])
             self.assertTrue(favorite["favorited_at"].endswith("Z"))
+            self.assertTrue(favorite["protected"])
             metadata_path = os.path.join(root, FAVORITES_FILENAME)
             with open(metadata_path, encoding="utf-8") as metadata_file:
                 metadata = json.load(metadata_file)
@@ -277,11 +279,13 @@ class GameRecordingReviewTestCase(unittest.TestCase):
             )
             self.assertTrue(recording["favorite"])
             self.assertEqual(recording["favorited_at"], favorite["favorited_at"])
+            self.assertTrue(recording["protected"])
             self.assertEqual(scanned["summary"]["game_count"], 1)
 
             unfavorite = set_recording_favorite(root, relative_path, False)
             self.assertFalse(unfavorite["favorite"])
             self.assertIsNone(unfavorite["favorited_at"])
+            self.assertFalse(unfavorite["protected"])
             recording = next(
                 item
                 for game in scan_recordings(root)["games"]
@@ -289,6 +293,7 @@ class GameRecordingReviewTestCase(unittest.TestCase):
                 if item["path"] == relative_path
             )
             self.assertFalse(recording["favorite"])
+            self.assertFalse(recording["protected"])
 
     def test_scan_reports_malformed_favorite_metadata_without_hiding_recordings(self):
         with tempfile.TemporaryDirectory() as root:
@@ -316,6 +321,7 @@ class GameRecordingReviewTestCase(unittest.TestCase):
 
             saved = set_recording_note(root, relative_path, "精彩团战\n五杀")
             self.assertEqual(saved["note"], "精彩团战\n五杀")
+            self.assertTrue(saved["protected"])
 
             set_recording_favorite(root, relative_path, True)
             set_recording_favorite(root, relative_path, False)
@@ -327,11 +333,50 @@ class GameRecordingReviewTestCase(unittest.TestCase):
             )
             self.assertFalse(recording["favorite"])
             self.assertEqual(recording["note"], "精彩团战\n五杀")
+            self.assertTrue(recording["protected"])
 
-            set_recording_note(root, relative_path, "")
+            cleared = set_recording_note(root, relative_path, "")
+            self.assertFalse(cleared["protected"])
             with open(os.path.join(root, FAVORITES_FILENAME), encoding="utf-8") as metadata_file:
                 metadata = json.load(metadata_file)
             self.assertNotIn(relative_path.replace(os.sep, "/"), metadata["favorites"])
+
+    def test_unknown_recording_metadata_is_preserved_and_protects_deletion(self):
+        with tempfile.TemporaryDirectory() as root:
+            video_path, _, _, _, _ = self.create_recording_tree(root)
+            relative_path = os.path.relpath(video_path, root)
+            metadata_path = os.path.join(root, FAVORITES_FILENAME)
+            with open(metadata_path, "w", encoding="utf-8") as metadata_file:
+                json.dump(
+                    {
+                        "version": 1,
+                        "favorites": {
+                            relative_path.replace(os.sep, "/"): {
+                                "future_feature": {"enabled": True}
+                            }
+                        },
+                    },
+                    metadata_file,
+                )
+
+            recording = next(
+                item
+                for game in scan_recordings(root)["games"]
+                for item in game["recordings"]
+                if item["path"] == relative_path
+            )
+            self.assertTrue(recording["protected"])
+            self.assertFalse(recording["favorite"])
+            self.assertEqual(recording["note"], "")
+
+            with self.assertRaisesRegex(RuntimeError, "关联数据"):
+                delete_recording(
+                    root,
+                    relative_path,
+                    recording["size"],
+                    recording["mtime_ns"],
+                )
+            self.assertTrue(os.path.isfile(video_path))
 
     def test_note_api_validates_and_survives_a_new_scan(self):
         with tempfile.TemporaryDirectory() as root:
@@ -402,18 +447,21 @@ class GameRecordingReviewTestCase(unittest.TestCase):
             self.assertFalse(os.path.exists(cover_path))
             self.assertTrue(os.path.isfile(second_video))
 
-    def test_delete_recording_removes_its_favorite_metadata(self):
+    def test_delete_recording_rejects_recording_with_metadata(self):
         with tempfile.TemporaryDirectory() as root:
-            video_path, _, _, _, _ = self.create_recording_tree(root)
+            video_path, cover_path, _, _, _ = self.create_recording_tree(root)
             stat = os.stat(video_path)
             relative_path = os.path.relpath(video_path, root)
             set_recording_favorite(root, relative_path, True)
 
-            delete_recording(root, relative_path, stat.st_size, stat.st_mtime_ns)
+            with self.assertRaisesRegex(RuntimeError, "关联数据"):
+                delete_recording(root, relative_path, stat.st_size, stat.st_mtime_ns)
 
             with open(os.path.join(root, FAVORITES_FILENAME), encoding="utf-8") as metadata_file:
                 metadata = json.load(metadata_file)
-            self.assertNotIn(relative_path.replace(os.sep, "/"), metadata["favorites"])
+            self.assertIn(relative_path.replace(os.sep, "/"), metadata["favorites"])
+            self.assertTrue(os.path.isfile(video_path))
+            self.assertTrue(os.path.isfile(cover_path))
 
     def test_delete_recording_rejects_a_file_changed_after_scan(self):
         with tempfile.TemporaryDirectory() as root:
@@ -569,6 +617,53 @@ class GameRecordingReviewTestCase(unittest.TestCase):
             )
             self.assertEqual(malformed_response.status_code, 200)
             self.assertEqual(len(malformed_response.get_json()["errors"]), 1)
+
+    def test_batch_delete_api_skips_recordings_with_metadata(self):
+        with tempfile.TemporaryDirectory() as root:
+            video_path, cover_path, second_video, _, _ = self.create_recording_tree(root)
+            relative_path = os.path.relpath(video_path, root)
+            set_recording_note(root, relative_path, "保留这一段")
+            app = Flask(__name__)
+            app.register_blueprint(
+                game_recording_review_bp,
+                url_prefix="/tools/game-recording-review",
+            )
+            client = app.test_client()
+            scan_data = client.post(
+                "/tools/game-recording-review/api/scan",
+                json={"path": root},
+            ).get_json()
+            recordings = [
+                recording
+                for game in scan_data["games"]
+                for recording in game["recordings"]
+            ]
+
+            response = client.delete(
+                "/tools/game-recording-review/api/recordings",
+                json={
+                    "scan_id": scan_data["scan_id"],
+                    "recordings": [
+                        {
+                            "root": recording["root"],
+                            "path": recording["path"],
+                            "size": recording["size"],
+                            "mtime_ns": recording["mtime_ns"],
+                        }
+                        for recording in recordings
+                    ],
+                },
+            )
+
+            data = response.get_json()
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(data["success"])
+            self.assertEqual(data["deleted_count"], 1)
+            self.assertEqual(len(data["errors"]), 1)
+            self.assertIn("关联数据", data["errors"][0]["message"])
+            self.assertTrue(os.path.isfile(video_path))
+            self.assertTrue(os.path.isfile(cover_path))
+            self.assertFalse(os.path.exists(second_video))
 
     def test_favorite_api_updates_and_survives_a_new_scan(self):
         with tempfile.TemporaryDirectory() as root:

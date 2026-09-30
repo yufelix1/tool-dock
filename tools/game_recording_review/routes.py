@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 import secrets
 import tempfile
@@ -33,7 +32,6 @@ _scan_roots = OrderedDict()
 _scan_roots_lock = Lock()
 _favorites_lock = Lock()
 _settings_lock = Lock()
-logger = logging.getLogger(__name__)
 
 
 def validate_root(root_path):
@@ -305,8 +303,6 @@ def _read_favorites_unlocked(root_path):
             raise ValueError("收藏数据格式无效")
         if not isinstance(note, str) or len(note) > MAX_NOTE_LENGTH:
             raise ValueError("收藏数据格式无效")
-        if favorited_at is None and not note:
-            raise ValueError("收藏数据格式无效")
 
     return favorites
 
@@ -460,7 +456,8 @@ def scan_recordings(root_paths, ignored_directories=None):
                         relative_directory_path,
                         video_entry.name,
                     )
-                    favorite_metadata = favorites.get(_favorite_key(relative_path)) or {}
+                    favorite_key = _favorite_key(relative_path)
+                    favorite_metadata = favorites.get(favorite_key) or {}
                     game["recordings"].append(
                         {
                             "root": root_path,
@@ -483,6 +480,7 @@ def scan_recordings(root_paths, ignored_directories=None):
                             "favorite": bool(favorite_metadata.get("favorited_at")),
                             "favorited_at": favorite_metadata.get("favorited_at"),
                             "note": favorite_metadata.get("note", ""),
+                            "protected": favorite_key in favorites,
                         }
                     )
 
@@ -587,9 +585,12 @@ def set_recording_favorite(root_path, relative_path, favorite):
 
     favorite_key = _favorite_key(normalized_relative_path)
     with _favorites_lock:
+        if not os.path.isfile(video_path):
+            raise FileNotFoundError("录屏文件不存在，请重新扫描")
         favorites = _read_favorites_unlocked(root_path)
+        previous_metadata = favorites.get(favorite_key)
+        had_metadata = favorite_key in favorites
         metadata = dict(favorites.get(favorite_key) or {})
-        changed = False
 
         if favorite:
             if not metadata.get("favorited_at"):
@@ -598,21 +599,23 @@ def set_recording_favorite(root_path, relative_path, favorite):
                     .isoformat(timespec="seconds")
                     .replace("+00:00", "Z")
                 )
-                changed = True
-        elif metadata.pop("favorited_at", None) is not None:
-            changed = True
+        else:
+            metadata.pop("favorited_at", None)
 
         if metadata:
             favorites[favorite_key] = metadata
         else:
             favorites.pop(favorite_key, None)
-        if changed:
+        if had_metadata != bool(metadata) or (
+            metadata and metadata != previous_metadata
+        ):
             _write_favorites_unlocked(root_path, favorites)
 
     return {
         "path": normalized_relative_path,
         "favorite": favorite,
         "favorited_at": metadata.get("favorited_at"),
+        "protected": bool(metadata),
     }
 
 
@@ -634,9 +637,12 @@ def set_recording_note(root_path, relative_path, note):
 
     favorite_key = _favorite_key(normalized_relative_path)
     with _favorites_lock:
+        if not os.path.isfile(video_path):
+            raise FileNotFoundError("录屏文件不存在，请重新扫描")
         favorites = _read_favorites_unlocked(root_path)
+        previous_metadata = favorites.get(favorite_key)
+        had_metadata = favorite_key in favorites
         metadata = dict(favorites.get(favorite_key) or {})
-        previous_note = metadata.get("note", "")
 
         if note:
             metadata["note"] = note
@@ -647,18 +653,16 @@ def set_recording_note(root_path, relative_path, note):
             favorites[favorite_key] = metadata
         else:
             favorites.pop(favorite_key, None)
-        if note != previous_note:
+        if had_metadata != bool(metadata) or (
+            metadata and metadata != previous_metadata
+        ):
             _write_favorites_unlocked(root_path, favorites)
 
-    return {"path": normalized_relative_path, "note": note}
-
-
-def _remove_recording_metadata(root_path, normalized_relative_path):
-    favorite_key = _favorite_key(normalized_relative_path)
-    with _favorites_lock:
-        favorites = _read_favorites_unlocked(root_path)
-        if favorites.pop(favorite_key, None) is not None:
-            _write_favorites_unlocked(root_path, favorites)
+    return {
+        "path": normalized_relative_path,
+        "note": note,
+        "protected": bool(metadata),
+    }
 
 
 def delete_recording(root_path, relative_path, expected_size, expected_mtime_ns):
@@ -668,20 +672,24 @@ def delete_recording(root_path, relative_path, expected_size, expected_mtime_ns)
         expected_parts={3},
         extensions=VIDEO_EXTENSIONS,
     )
-    if not os.path.isfile(video_path):
-        raise FileNotFoundError("录屏文件不存在，请重新扫描")
-
     try:
         expected_size = int(expected_size)
         expected_mtime_ns = int(expected_mtime_ns)
     except (TypeError, ValueError) as error:
         raise ValueError("录屏校验信息无效") from error
 
-    stat = os.stat(video_path, follow_symlinks=False)
-    if stat.st_size != expected_size or stat.st_mtime_ns != expected_mtime_ns:
-        raise RuntimeError("录屏文件在扫描后发生变化，请重新扫描")
+    favorite_key = _favorite_key(normalized_relative_path)
+    with _favorites_lock:
+        favorites = _read_favorites_unlocked(root_path)
+        if favorite_key in favorites:
+            raise RuntimeError("录屏包含收藏、评论或其他关联数据，不能删除")
+        if not os.path.isfile(video_path):
+            raise FileNotFoundError("录屏文件不存在，请重新扫描")
+        stat = os.stat(video_path, follow_symlinks=False)
+        if stat.st_size != expected_size or stat.st_mtime_ns != expected_mtime_ns:
+            raise RuntimeError("录屏文件在扫描后发生变化，请重新扫描")
+        os.remove(video_path)
 
-    os.remove(video_path)
     deleted = [normalized_relative_path]
     video_stem = os.path.splitext(os.path.basename(video_path))[0].lower()
 
@@ -694,15 +702,6 @@ def delete_recording(root_path, relative_path, expected_size, expected_mtime_ns)
         if is_regular_file and stem.lower() == video_stem and extension.lower() in COVER_EXTENSIONS:
             os.remove(entry.path)
             deleted.append(os.path.join(os.path.dirname(normalized_relative_path), entry.name))
-
-    try:
-        _remove_recording_metadata(root_path, normalized_relative_path)
-    except (OSError, ValueError) as error:
-        logger.warning(
-            "Unable to remove recording metadata for %s: %s",
-            normalized_relative_path,
-            error,
-        )
 
     return deleted
 
