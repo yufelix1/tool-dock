@@ -211,7 +211,7 @@ html {
 .view-tabs {
     display: grid;
     align-self: stretch;
-    grid-template-columns: repeat(3, 108px);
+    grid-template-columns: repeat(4, 108px);
     overflow-x: auto;
 }
 
@@ -866,6 +866,92 @@ html {
     text-align: center;
 }
 
+.comment-cloud-heading,
+.comment-results-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.comment-cloud-heading h2,
+.comment-results-heading h2 {
+    min-width: 0;
+    font-size: 17px;
+    overflow-wrap: anywhere;
+}
+
+.comment-cloud-heading span {
+    flex: 0 0 auto;
+    color: var(--review-muted);
+    font-size: 13px;
+}
+
+.comment-cloud {
+    display: flex;
+    min-height: 150px;
+    flex-wrap: wrap;
+    align-content: center;
+    align-items: baseline;
+    justify-content: center;
+    gap: 8px 14px;
+    padding: 22px 12px 30px;
+}
+
+.review-page .comment-cloud-item {
+    width: auto;
+    max-width: 100%;
+    min-height: 38px;
+    padding: 4px 7px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: var(--review-ink);
+    line-height: 1.35;
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.review-page .comment-cloud-item:hover,
+.review-page .comment-cloud-item[aria-pressed="true"] {
+    border-bottom-color: currentColor;
+    background: transparent;
+}
+
+.review-page .comment-cloud-item:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+}
+
+.comment-cloud-item small {
+    margin-left: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.review-page .comment-cloud-level-0 { color: var(--review-muted); font-size: 15px; }
+.review-page .comment-cloud-level-1 { color: #4c5f75; font-size: 17px; }
+.review-page .comment-cloud-level-2 { color: var(--review-accent-dark); font-size: 19px; }
+.review-page .comment-cloud-level-3 { color: #8c5430; font-size: 23px; }
+.review-page .comment-cloud-level-4 { color: var(--review-ink); font-size: 28px; font-weight: 750; }
+
+.comment-results {
+    padding-top: 20px;
+    border-top: 1px solid var(--review-line);
+}
+
+.comment-results-heading {
+    align-items: center;
+    margin-bottom: 18px;
+}
+
+.comment-results-heading button {
+    flex: 0 0 auto;
+}
+
 .setup-empty {
     display: grid;
     min-height: 280px;
@@ -1177,7 +1263,12 @@ html {
 
     .view-tabs {
         order: 2;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .review-page .view-tab {
+        padding-inline: 4px;
+        font-size: 13px;
     }
 
     .filter-controls {
@@ -1223,6 +1314,19 @@ html {
 
     .recording-card:hover {
         transform: none;
+    }
+
+    .comment-cloud-heading {
+        flex-wrap: wrap;
+    }
+
+    .comment-cloud {
+        gap: 6px 8px;
+        padding-inline: 0;
+    }
+
+    .review-page .comment-cloud-level-4 {
+        font-size: 25px;
     }
 
     .recording-info {

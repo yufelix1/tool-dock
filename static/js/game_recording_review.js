@@ -9,6 +9,7 @@ const reviewState = {
     filter: "",
     timeRange: "",
     gameId: "",
+    selectedComment: "",
     selectedRecordingKeys: new Set(),
     batchDeleting: false,
 };
@@ -31,6 +32,7 @@ const elements = {
     content: document.getElementById("review-content"),
     recordingTabCount: document.getElementById("recording-tab-count"),
     favoriteTabCount: document.getElementById("favorite-tab-count"),
+    commentTabCount: document.getElementById("comment-tab-count"),
     emptyTabCount: document.getElementById("empty-tab-count"),
     gameFilter: document.getElementById("game-filter"),
     timeRangeFilter: document.getElementById("time-range-filter"),
@@ -44,6 +46,15 @@ const elements = {
     favoritesView: document.getElementById("favorites-view"),
     favoriteGameGroups: document.getElementById("favorite-game-groups"),
     favoritesEmpty: document.getElementById("favorites-empty"),
+    commentsView: document.getElementById("comments-view"),
+    commentCloudContent: document.getElementById("comment-cloud-content"),
+    commentCloudSummary: document.getElementById("comment-cloud-summary"),
+    commentCloud: document.getElementById("comment-cloud"),
+    commentsEmpty: document.getElementById("comments-empty"),
+    commentResults: document.getElementById("comment-results"),
+    commentResultsTitle: document.getElementById("comment-results-title"),
+    commentGameGroups: document.getElementById("comment-game-groups"),
+    clearCommentFilter: document.getElementById("clear-comment-filter"),
     emptyView: document.getElementById("empty-view"),
     recordingsView: document.getElementById("recordings-view"),
     emptyDirectoryList: document.getElementById("empty-directory-list"),
@@ -98,28 +109,25 @@ elements.refreshButton.addEventListener("click", () => scanRoots(reviewState.roo
 elements.gameFilter.addEventListener("change", event => {
     reviewState.gameId = event.target.value;
     clearRecordingSelection();
-    updateViewCounts();
-    renderRecordings();
-    renderFavorites();
-    renderEmptyDirectories();
-    updateBatchControls();
+    renderAll();
 });
 
 elements.timeRangeFilter.addEventListener("change", event => {
     reviewState.timeRange = event.target.value;
     clearRecordingSelection();
-    updateViewCounts();
-    renderRecordings();
-    renderFavorites();
-    updateBatchControls();
+    renderAll();
 });
 
 elements.filterInput.addEventListener("input", event => {
     reviewState.filter = event.target.value.trim().toLowerCase();
     clearRecordingSelection();
-    renderRecordings();
-    renderFavorites();
-    renderEmptyDirectories();
+    renderAll();
+});
+
+elements.clearCommentFilter.addEventListener("click", () => {
+    reviewState.selectedComment = "";
+    clearRecordingSelection();
+    renderComments();
     updateBatchControls();
 });
 
@@ -336,6 +344,7 @@ function renderAll() {
     updateViewCounts();
     renderRecordings();
     renderFavorites();
+    renderComments();
     renderEmptyDirectories();
     updateBatchControls();
 }
@@ -350,7 +359,12 @@ function updateViewCounts() {
 
     elements.recordingTabCount.textContent = recordings.length;
     elements.favoriteTabCount.textContent = recordings.filter(recording => recording.favorite).length;
+    elements.commentTabCount.textContent = recordings.filter(recording => commentText(recording)).length;
     elements.emptyTabCount.textContent = emptyDirectoryCount;
+}
+
+function commentText(recording) {
+    return typeof recording.note === "string" ? recording.note.trim() : "";
 }
 
 function recordingMatchesScope(recording) {
@@ -382,6 +396,8 @@ function visibleRecordings() {
     if (reviewState.view === "empty") return [];
     return reviewState.games.flatMap(game => game.recordings).filter(recording => {
         if (reviewState.view === "favorites" && !recording.favorite) return false;
+        if (reviewState.view === "comments"
+            && (!reviewState.selectedComment || commentText(recording) !== reviewState.selectedComment)) return false;
         return recordingMatches(recording);
     });
 }
@@ -400,7 +416,8 @@ function syncRecordingSelectionControls() {
 }
 
 function updateBatchControls() {
-    const active = reviewState.view !== "empty";
+    const active = reviewState.view !== "empty"
+        && (reviewState.view !== "comments" || Boolean(reviewState.selectedComment));
     elements.batchControls.hidden = !active;
     if (!active) return;
 
@@ -444,6 +461,77 @@ function renderFavorites() {
         elements.favoritesEmpty,
         recording => recording.favorite && recordingMatches(recording),
     );
+}
+
+function renderComments() {
+    const recordings = reviewState.games.flatMap(game => game.recordings).filter(recordingMatches);
+    const comments = new Map();
+    recordings.forEach(recording => {
+        const note = commentText(recording);
+        if (note) comments.set(note, (comments.get(note) || 0) + 1);
+    });
+
+    if (reviewState.selectedComment && !comments.has(reviewState.selectedComment)) {
+        reviewState.selectedComment = "";
+        clearRecordingSelection();
+    }
+
+    elements.commentCloudContent.hidden = comments.size === 0;
+    elements.commentsEmpty.hidden = comments.size > 0;
+    elements.commentsEmpty.textContent = reviewState.games.some(game =>
+        game.recordings.some(recording => commentText(recording)))
+        ? "没有匹配的评论"
+        : "还没有评论";
+    elements.commentCloudSummary.textContent = `${[...comments.values()].reduce((sum, count) => sum + count, 0)} 条评论 · ${comments.size} 种内容`;
+    elements.commentCloud.replaceChildren();
+
+    const maxCount = [...comments.values()].reduce((max, count) => Math.max(max, count), 1);
+    [...comments.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-CN"))
+        .forEach(([note, count]) => {
+            const level = maxCount === 1 ? 2 : Math.round(4 * Math.log(count) / Math.log(maxCount));
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = `comment-cloud-item comment-cloud-level-${level}`;
+            button.setAttribute("aria-pressed", String(note === reviewState.selectedComment));
+            button.setAttribute("aria-label", `${note}，${count} 个录屏`);
+            button.title = `${note}\n${count} 个录屏`;
+            const characters = Array.from(note);
+            const label = document.createElement("span");
+            label.textContent = characters.length > 64
+                ? `${characters.slice(0, 64).join("")}…`
+                : note;
+            button.appendChild(label);
+            if (count > 1) {
+                const frequency = document.createElement("small");
+                frequency.textContent = `×${count}`;
+                button.appendChild(frequency);
+            }
+            button.addEventListener("click", () => {
+                reviewState.selectedComment = reviewState.selectedComment === note ? "" : note;
+                clearRecordingSelection();
+                renderComments();
+                updateBatchControls();
+                [...elements.commentCloud.children].find(item => item.title === button.title)?.focus();
+            });
+            elements.commentCloud.appendChild(button);
+        });
+
+    elements.commentResults.hidden = !reviewState.selectedComment;
+    if (reviewState.selectedComment) {
+        const count = comments.get(reviewState.selectedComment);
+        elements.commentResultsTitle.textContent = `${reviewState.selectedComment} · ${count} 个录屏`;
+        renderRecordingGroups(
+            elements.commentGameGroups,
+            elements.commentsEmpty,
+            recording => commentText(recording) === reviewState.selectedComment && recordingMatches(recording),
+        );
+    } else {
+        elements.commentGameGroups.querySelectorAll(".recording-grid").forEach(grid => {
+            directorySegmentObserver?.unobserve(grid);
+        });
+        elements.commentGameGroups.replaceChildren();
+    }
 }
 
 function renderRecordingGroups(container, emptyElement, predicate) {
@@ -804,6 +892,7 @@ function setView(view) {
     elements.timeRangeFilter.disabled = view === "empty";
     elements.recordingsView.hidden = view !== "recordings";
     elements.favoritesView.hidden = view !== "favorites";
+    elements.commentsView.hidden = view !== "comments";
     elements.emptyView.hidden = view !== "empty";
     document.querySelectorAll(".view-tab").forEach(tab => {
         const active = tab.dataset.view === view;
